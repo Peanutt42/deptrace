@@ -1,0 +1,10 @@
+[package]
+name = "deptrace"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+deptrace_config = { path = "../deptrace_config" }
+serde = { workspace = true }
+#thiserror = { workspace = true }
+lddtree = "0.5.0"

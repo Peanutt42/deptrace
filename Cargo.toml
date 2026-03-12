@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = [
+	"deptrace",
+	"deptrace_config",
+	"deptrace_cli",
+	"plugins/cargo",
+	"examples/maximum_configuration",
+	"examples/no_config_cargo"
+]
+
+[workspace.dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.18"
+toml = "1.0.6"

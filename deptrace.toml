@@ -1,0 +1,10 @@
+# name is also set by the Cargo.toml workspace name
+# name = "deptrace"
+
+# disabled_plugins = []
+
+
+# [dependencies]
+
+# [targets.deptrace_cli]
+# dependencies = []

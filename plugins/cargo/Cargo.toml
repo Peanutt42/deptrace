@@ -1,0 +1,10 @@
+[package]
+name = "deptrace_cargo_plugin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+deptrace = { path = "../../deptrace" }
+deptrace_config = { path = "../../deptrace_config" }
+thiserror = { workspace = true }
+cargo_metadata = "0.23.1"

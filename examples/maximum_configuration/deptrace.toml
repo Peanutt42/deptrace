@@ -1,0 +1,18 @@
+# (optional)
+name = "maximum_configuration"
+# remove cargo plugin in order to manually configure everything
+disabled_plugins = ["cargo"]
+
+
+# OPTION 1: declare "workspace/project" wide dependencies, usefull when they are reused
+[dependencies.foo_dylib]
+kind = "Runtime"
+provides = ["foo_dylib.so", "foo_dylib.dll", "foo_dylib.dylib"]
+
+[targets.maximum_configuration]
+dependencies = ["foo_dylib"]
+
+
+# OPTION 2: declare dependencies inline
+# [targets.maximum_configuration.dependencies]
+# foo_dylib = { kind = "Runtime", provides = ["foo_dylib.so", "foo_dylib.dll", "foo_dylib.dylib"] }

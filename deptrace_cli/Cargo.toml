@@ -1,0 +1,15 @@
+[package]
+name = "deptrace_cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "deptrace"
+path = "src/main.rs"
+
+[dependencies]
+deptrace = { path = "../deptrace" }
+deptrace_config = { path = "../deptrace_config" }
+deptrace_cargo_plugin = { path = "../plugins/cargo" }
+lddtree = "0.5.0"
+clap = { version = "4.5.60", features = ["derive"] }

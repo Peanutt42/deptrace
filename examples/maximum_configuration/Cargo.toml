@@ -1,0 +1,7 @@
+[package]
+name = "maximum_configuration"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+foo_dylib = { path = "../foo_dylib" }
