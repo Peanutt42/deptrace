@@ -1,14 +1,29 @@
+#![allow(unused_assignments)] // miette actually reads those values, see
+// `LoadProjectConfigFileError`
+
 use crate::{DependencyConfig, TargetConfig};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Diagnostic)]
+#[error("failed to parse toml: {0}")]
+pub struct TomlDeErrorMsg(String);
+
+#[derive(Debug, Error, Diagnostic)]
 pub enum LoadProjectConfigFileError {
     #[error("faield to read file: {0}")]
     IO(#[from] std::io::Error),
-    #[error("failed to parse toml: {0}")]
-    Toml(#[from] toml::de::Error),
+    #[error("failed to load project config file")]
+    Toml {
+        #[diagnostic_source]
+        toml_error_msg: TomlDeErrorMsg,
+        #[source_code]
+        source_code: NamedSource<String>,
+        #[label("here")]
+        span: SourceSpan,
+    },
 }
 
 /// Configuration of a project
@@ -16,14 +31,33 @@ pub enum LoadProjectConfigFileError {
 pub struct ProjectConfigFile {
     #[serde(flatten, default)]
     pub config: ProjectConfig,
+    /// treat warnings as errors, exiting with exit code on warnings
+    #[serde(default)]
+    pub warnings_as_errors: bool,
     /// list of plugin names to explicitly not automatically load for this project
     #[serde(default)]
     pub disabled_plugins: Vec<String>,
 }
 impl ProjectConfigFile {
-    pub fn read_from_file(filepath: impl AsRef<Path>) -> Result<Self, LoadProjectConfigFileError> {
-        let content = std::fs::read_to_string(filepath)?;
-        Ok(toml::from_str(&content)?)
+    pub fn read_from_file(
+        filepath: impl AsRef<Path>,
+    ) -> Result<Self, Box<LoadProjectConfigFileError>> {
+        let content = std::fs::read_to_string(filepath.as_ref())
+            .map_err(|e| Box::new(LoadProjectConfigFileError::IO(e)))?;
+        let filename = filepath
+            .as_ref()
+            .file_name()
+            .map(|str| str.to_string_lossy().to_string())
+            .unwrap_or("<unknown filename>".to_string());
+
+        toml::from_str(&content).map_err(|cause| {
+            let span = cause.span().map(|range| range.into()).unwrap(); //.unwrap_or((0..0).into());
+            Box::new(LoadProjectConfigFileError::Toml {
+                toml_error_msg: TomlDeErrorMsg(cause.message().to_string()),
+                source_code: NamedSource::new(filename, content),
+                span,
+            })
+        })
     }
 }
 

@@ -13,6 +13,7 @@ pub enum DependencyKind {
 /// the name of the dependency is the key for the HashMap<String, DependencyConfig>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DependencyConfig {
+    pub name: String,
     /// what kind the dependency is, when it is used.
     /// can be multiple kinds
     #[serde(alias = "kind", deserialize_with = "deserialize_one_or_many")]

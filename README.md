@@ -13,6 +13,7 @@ cargo install --path ./deptrace_cli
 ### TODO / Feature list
 
 - [ ] Figure out good format for project/dependency config files
+- [ ] add (sem-)version to targets and dependencies
 - [X] ldd style static analysis of needed dynamic shared libraries
     - [ ] verify if all used libraries are also declared as deps
 - [ ] strace style runtime analysis and verification of what other libraries are dynamically loaded, what system files are read that maybe are provided by system packages

@@ -1,37 +1,33 @@
 use clap::Parser;
-use lddtree::DependencyAnalyzer;
-use std::process::exit;
+use colored::Colorize;
+use deptrace_cli::Cli;
+use lddtree::{DependencyAnalyzer, Library};
+use miette::{Result, miette};
 
-// just for the deptrace executable cli, not for the library
-mod cli;
-use cli::Cli;
-
-fn main() {
+fn main() -> Result<()> {
     let mut cli = Cli::parse();
+    let mut warnings_as_errors = cli.warnings_as_errors;
 
-    let project_config_file = cli
-        .load_project_config()
-        .expect("failed to load project config file");
+    let project_config_file = cli.load_project_config()?;
+    warnings_as_errors = warnings_as_errors || project_config_file.warnings_as_errors;
 
     println!("project config: {project_config_file:#?}");
 
     let Some(executable_filename) = cli.executable.file_name().and_then(std::ffi::OsStr::to_str)
     else {
-        eprintln!(
+        return Err(miette!(
             "could not figure the filename of the specified executable '{}' out! make sure it exists",
             cli.executable.display()
-        );
-        exit(1);
+        ));
     };
 
     let Some(executable_target_config) =
         project_config_file.config.targets.get(executable_filename)
     else {
-        eprintln!(
+        return Err(miette!(
             "the executable named '{}' that you specified could not be found in this deptrace project configuration!",
             executable_filename
-        );
-        exit(1);
+        ));
     };
 
     let deps = DependencyAnalyzer::default()
@@ -53,25 +49,67 @@ fn main() {
         }
     }
 
-    println!("Direct dependencies: {:?}", deps.needed);
+    let mut encountered_warning = false;
+    if !undocumented_dependencies.is_empty() {
+        encountered_warning = true;
+    }
 
-    println!("\nAll documented dependencies:");
+    println!(
+        "\n{}:\n  {}",
+        "Direct dependencies".bright_green(),
+        deps.needed.join(", ")
+    );
+
+    println!("\n{}:", "All documented dependencies".bright_green());
     for (name, lib) in documented_dependencies {
-        println!(
-            "  {} => {} (found: {})",
-            name,
-            lib.path.display(),
-            lib.found()
-        );
+        print_lib_info(name, lib);
     }
 
-    println!("\nAll undocumented dependencies:");
-    for (name, lib) in undocumented_dependencies {
-        println!(
-            "  {} => {} (found: {})",
-            name,
-            lib.path.display(),
-            lib.found()
-        );
+    if !undocumented_dependencies.is_empty() {
+        encountered_warning = true;
+        println!();
+        print_warning("Some dependencies are not documented!");
+        for (name, lib) in undocumented_dependencies {
+            print_lib_info(name, lib);
+        }
     }
+
+    let not_installed_dependency_names = deps
+        .libraries
+        .iter()
+        .filter_map(|(name, lib)| {
+            if !lib.found() {
+                Some(name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if !not_installed_dependency_names.is_empty() {
+        encountered_warning = true;
+        println!();
+        print_warning("Some dependencies are missing on your system:");
+
+        println!("  {}", not_installed_dependency_names.join(", "));
+    }
+
+    if warnings_as_errors && encountered_warning {
+        return Err(miette!(
+            "returning error exit code as warnings_as_errors is on and warnings where encountered"
+        ));
+    }
+
+    Ok(())
+}
+
+fn print_lib_info(name: &str, lib: &Library) {
+    if lib.found() {
+        println!("  {name} => {}", lib.path.display());
+    } else {
+        println!("  {name}");
+    }
+}
+
+fn print_warning(msg: impl AsRef<str>) {
+    println!("{}: {}", "Warning".bright_yellow().bold(), msg.as_ref());
 }

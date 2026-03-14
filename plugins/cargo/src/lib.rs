@@ -1,7 +1,7 @@
 use cargo_metadata::{Metadata, MetadataCommand};
 use deptrace::{Plugin, PluginProvider};
 use deptrace_config::{ProjectConfig, TargetConfig};
-use std::path::PathBuf;
+use std::path::Path;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -11,7 +11,9 @@ pub struct CargoPlugin {
     cargo_metadata: Metadata,
 }
 impl Plugin for CargoPlugin {
-    fn generate_project_config(&self) -> Result<ProjectConfig, Box<dyn std::error::Error>> {
+    fn generate_project_config(
+        &self,
+    ) -> Result<ProjectConfig, Box<dyn std::error::Error + Send + Sync>> {
         let mut project_config = ProjectConfig::default();
 
         for package in self.cargo_metadata.workspace_packages() {
@@ -44,7 +46,7 @@ impl PluginProvider for CargoPluginProvider {
         "cargo"
     }
 
-    fn try_load_plugin(&self, project_dir: PathBuf) -> Option<Box<dyn Plugin>> {
+    fn try_load_plugin(&self, project_dir: &Path) -> Option<Box<dyn Plugin>> {
         // if there is no Cargo.toml, we dont enable the CargoPlugin, eventhough there could be a
         // cargo workspace in a parent directory
         if !project_dir.join("Cargo.toml").exists() {
