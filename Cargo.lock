@@ -230,6 +230,7 @@ name = "deptrace_cargo_plugin"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "colored",
  "deptrace",
  "deptrace_config",
  "thiserror",

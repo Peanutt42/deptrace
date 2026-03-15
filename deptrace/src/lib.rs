@@ -1,5 +1,7 @@
 mod plugin;
-pub use plugin::{Plugin, PluginProvider, Plugins, PluginsGenerateConfigError};
+pub use plugin::{
+	Plugin, PluginPrintlnCallback, PluginProvider, Plugins, PluginsGenerateConfigError,
+};
 
 mod dependency;
 pub use dependency::Dependency;
@@ -8,4 +10,4 @@ mod target;
 pub use target::Target;
 
 mod project;
-// pub use project::resolve_project_config;
+pub use project::{Project, resolve_project_config};

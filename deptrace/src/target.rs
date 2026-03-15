@@ -1,14 +1,18 @@
-use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::Dependency;
 
 /// target <=> executable
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
-    pub name: String,
-    pub dependencies: Vec<Arc<Dependency>>,
+	pub filepath: PathBuf,
+	pub dependencies: HashMap<String, Arc<Dependency>>,
 }
 impl Target {
-    pub fn new(name: String, dependencies: Vec<Arc<Dependency>>) -> Self {
-        Self { name, dependencies }
-    }
+	pub fn new(filepath: PathBuf, dependencies: HashMap<String, Arc<Dependency>>) -> Self {
+		Self {
+			filepath,
+			dependencies,
+		}
+	}
 }

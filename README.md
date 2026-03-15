@@ -10,6 +10,21 @@ To install the cli:
 cargo install --path ./deptrace_cli
 ```
 
+### Usage
+
+You can run:
+
+```bash
+deptrace
+```
+
+To analyze every target and their dependencies in your project.
+
+If your project uses the cargo build system, the cargo plugin will automatically load your targets for you.
+
+Additionally, you can explicitly configure the tartets and their dependencies using a `deptrace.toml` or `.deptrace.toml` file at the root of your project.
+
+
 ### TODO / Feature list
 
 - [ ] Figure out good format for project/dependency config files
