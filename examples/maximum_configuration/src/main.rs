@@ -1,3 +1,11 @@
+use std::ffi::CStr;
+use std::ffi::c_char;
+
+unsafe extern "C" {
+	fn foo() -> *const c_char;
+}
+
 fn main() {
-	println!("foo_dylib::foo() = {}", foo_dylib::foo());
+	let result = unsafe { CStr::from_ptr(foo()).to_str().expect("invalid UTF-8") };
+	println!("foo_lib::foo() = {result}");
 }

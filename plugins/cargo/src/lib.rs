@@ -3,6 +3,7 @@ use colored::Colorize;
 use deptrace::{Plugin, PluginPrintlnCallback, PluginProvider};
 use deptrace_config::{ProjectConfig, TargetConfig};
 use std::{
+	collections::HashMap,
 	io::BufReader,
 	path::{Path, PathBuf},
 	process::{Command, Stdio},
@@ -15,6 +16,10 @@ pub enum CargoPluginGenerateError {
 	RunCargoBuild(#[from] std::io::Error),
 	#[error("cargo build did not finish successfully")]
 	UnsuccessfullCargoBuild,
+	#[error(
+		"did not find the executable filepath in the artifact output of cargo metadata for target '{target_name}'"
+	)]
+	DidNotFindTargetOutputFilepath { target_name: String },
 }
 
 pub struct CargoPlugin {
@@ -41,6 +46,8 @@ impl Plugin for CargoPlugin {
 			.map_err(CargoPluginGenerateError::RunCargoBuild)?;
 		let reader = BufReader::new(cmd.stdout.take().unwrap());
 
+		let mut artifact_output_filepaths = HashMap::new();
+
 		for message in cargo_metadata::Message::parse_stream(reader) {
 			match message {
 				Ok(message) => match message {
@@ -50,7 +57,10 @@ impl Plugin for CargoPlugin {
 							"Compiling".green(),
 							artifact.target.name
 						));
-						// TODO: register what filepath a target has!
+
+						if let Some(filepath) = artifact.executable {
+							artifact_output_filepaths.insert(artifact.target.name, filepath);
+						}
 					}
 					cargo_metadata::Message::CompilerMessage(msg) => {
 						println_callback(msg.message.rendered.unwrap_or(msg.message.message));
@@ -76,17 +86,33 @@ impl Plugin for CargoPlugin {
 		let mut project_config = ProjectConfig::default();
 
 		for package in self.cargo_metadata.workspace_packages() {
+			// skip packages outside of the project_dir
+			if let Ok(package_manifest_path) = package.manifest_path.canonicalize() {
+				if !package_manifest_path.starts_with(&self.project_dir) {
+					continue;
+				}
+			} else {
+				continue;
+			}
+
 			for target in &package.targets {
-				if target.is_dylib() || target.is_cdylib() {
+				if target.is_cdylib() {
 					// TODO: add to (dynamic) libraries
 				}
 
 				if target.is_bin() {
+					let Some(filepath) = artifact_output_filepaths.get(&target.name) else {
+						return Err(Box::new(
+							CargoPluginGenerateError::DidNotFindTargetOutputFilepath {
+								target_name: target.name.clone(),
+							},
+						));
+					};
+
 					project_config.targets.insert(
 						target.name.clone(),
 						TargetConfig {
-							// TODO
-							filepath: std::env::current_dir().unwrap(),
+							filepath: filepath.clone().into_std_path_buf(),
 							// TODO
 							dependencies: vec![],
 						},

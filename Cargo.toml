@@ -5,6 +5,7 @@ members = [
 	"deptrace_config",
 	"deptrace_cli",
 	"plugins/cargo",
+	"examples/foo_lib",
 	"examples/maximum_configuration",
 	"examples/no_config_cargo"
 ]

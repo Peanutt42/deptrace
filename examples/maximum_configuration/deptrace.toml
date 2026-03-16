@@ -5,9 +5,9 @@ disabled_plugins = ["cargo"]
 
 
 # OPTION 1: declare "workspace/project" wide dependencies, usefull when they are reused
-# [dependencies.foo_dylib]
+# [dependencies.foo_lib]
 # kind = "Runtime"
-# provides = ["libfoo_dylib.so", "foo_dylib.dll", "foo_dylib.dylib"]
+# provides = ["libfoo_lib.so", "foo_lib.dll", "foo_lib.dylib"]
 
 # [targets.maximum_configuration]
 # dependencies = ["foo_dylib"]
@@ -18,5 +18,5 @@ disabled_plugins = ["cargo"]
 # TODO: what to do about the profile here?
 filepath = "../../target/debug/maximum_configuration"
 dependencies = [
-	{ name = "foo_dylib", kind = "Runtime", provides = ["libfoo_dylib.so", "foo_dylib.dll", "foo_dylib.dylib"] }
+	{ name = "foo_lib", kind = "Runtime", provides = ["libfoo_lib.so", "foo_lib.dll", "foo_lib.dylib"] }
 ]
