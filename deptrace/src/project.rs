@@ -48,21 +48,21 @@ pub fn resolve_project_config(
 	let unresolved_project_dependency_declarations =
 		collect_unresolved_project_dependency_declarations(&project_config)?;
 
-	// TODO: merge phase 2 and 3 into one
 	// phase 2: remove all dependency declarations in subdependencies
 	// (this means we dont have to worry about the infinetly recursive subdependency declarations
 	// anymore)
-	let unresolved_project_dependencies_ref_subdeps_only =
-		unresolved_project_dependency_declarations
-			.into_iter()
-			.map(|(name, dep)| (name.clone(), NamedDependencyConfig::new(name, dep).into()))
-			.collect::<HashMap<String, UnresolvedDependencyRefSubdependencyOnly>>();
-
-	// phase 3: iteratively resolve all subdeps of the declared dependencies, until everything is
+	// then, iteratively resolve all subdeps of the declared dependencies, until everything is
 	// resolved
-	let partially_unresolved_dependencies = unresolved_project_dependencies_ref_subdeps_only
+	let partially_unresolved_dependencies: HashMap<
+		String,
+		Rc<RefCell<PartiallyUnresolvedDependency>>,
+	> = unresolved_project_dependency_declarations
 		.into_iter()
 		.map(|(name, dep)| {
+			// removes the dependency declarations in subdependencies, replaces them with name references
+			let dep: UnresolvedDependencyRefSubdependencyOnly =
+				NamedDependencyConfig::new(name.clone(), dep).into();
+
 			(
 				name,
 				Rc::new(RefCell::new(PartiallyUnresolvedDependency {
@@ -77,33 +77,23 @@ pub fn resolve_project_config(
 				})),
 			)
 		})
-		.collect::<HashMap<String, Rc<RefCell<PartiallyUnresolvedDependency>>>>();
+		.collect();
 
-	loop {
-		let mut found_unresolved_dependency = false;
-		for dep in partially_unresolved_dependencies.values() {
-			for subdep in dep.borrow_mut().subdependencies.iter_mut() {
-				if let UnresolvedOrPartiallyUnresolvedDependency::Unresolved(subdep_name) = subdep {
-					found_unresolved_dependency = true;
-					let Some(subdep_ref) =
-						partially_unresolved_dependencies.get(subdep_name.as_str())
-					else {
-						return Err(ResolveProjectError::UnresolvedDependency {
-							dep_name: subdep_name.clone(),
-						});
-					};
-					*subdep =
-						UnresolvedOrPartiallyUnresolvedDependency::Partially(subdep_ref.clone());
-				}
+	for dep in partially_unresolved_dependencies.values() {
+		for subdep in dep.borrow_mut().subdependencies.iter_mut() {
+			if let UnresolvedOrPartiallyUnresolvedDependency::Unresolved(subdep_name) = subdep {
+				let Some(subdep_ref) = partially_unresolved_dependencies.get(subdep_name.as_str())
+				else {
+					return Err(ResolveProjectError::UnresolvedDependency {
+						dep_name: subdep_name.clone(),
+					});
+				};
+				*subdep = UnresolvedOrPartiallyUnresolvedDependency::Partially(subdep_ref.clone());
 			}
-		}
-
-		if !found_unresolved_dependency {
-			break;
 		}
 	}
 
-	// phase 4
+	// phase 3
 	let resolved_project_dependencies: HashMap<String, Arc<Dependency>> =
 		partially_unresolved_dependencies
 			.into_values()

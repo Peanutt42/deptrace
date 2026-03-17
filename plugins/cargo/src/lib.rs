@@ -1,6 +1,8 @@
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{Metadata, MetadataCommand, diagnostic::DiagnosticLevel};
 use colored::Colorize;
-use deptrace::{LoadPluginResult, Plugin, PluginPrintlnCallback, PluginProvider};
+use deptrace::{
+	LoadPluginResult, Plugin, PluginPrintlnCallback, PluginProvider, WarningSink, emit_warning,
+};
 use deptrace_config::{
 	DependencyConfig, DependencyKind, DependencyNameOrDependencyConfig, ProjectConfig, TargetConfig,
 };
@@ -17,6 +19,8 @@ use thiserror::Error;
 pub enum CargoPluginGenerateError {
 	#[error("failed to run cargo build: {0}")]
 	RunCargoBuild(#[from] std::io::Error),
+	#[error("cargo build reported error:\n{error}")]
+	CargoBuildReportedError { error: String },
 	#[error("cargo build did not finish successfully")]
 	UnsuccessfullCargoBuild,
 	#[error(
@@ -41,6 +45,7 @@ impl Plugin for CargoPlugin {
 	fn generate_project_config(
 		&self,
 		println_callback: PluginPrintlnCallback,
+		warning_sink: &mut dyn WarningSink,
 	) -> Result<ProjectConfig, Box<dyn std::error::Error + Send + Sync>> {
 		let extra_cargo_args_str = self
 			.extra_config_fields
@@ -94,7 +99,21 @@ impl Plugin for CargoPlugin {
 						artifact_output_filepaths.insert(artifact.target.name, filepaths);
 					}
 					cargo_metadata::Message::CompilerMessage(msg) => {
-						println_callback(msg.message.rendered.unwrap_or(msg.message.message));
+						let message = msg.message.rendered.unwrap_or(msg.message.message);
+						match msg.message.level {
+							DiagnosticLevel::Warning => emit_warning!(
+								warning_sink,
+								"cargo build reported warning:\n{message}"
+							),
+							DiagnosticLevel::Error => {
+								return Err(Box::new(
+									CargoPluginGenerateError::CargoBuildReportedError {
+										error: message,
+									},
+								));
+							}
+							_ => println_callback(message),
+						}
 					}
 					cargo_metadata::Message::BuildScriptExecuted(build_script) => {
 						if let Some(package) = self
@@ -211,8 +230,22 @@ impl Plugin for CargoPlugin {
 						.unwrap_or_default();
 					let filepath = match filepaths.first() {
 						Some(filepath) if filepaths.len() == 1 => filepath.clone(),
-						// TODO: maybe add warning?
-						_ => continue,
+						Some(_) => {
+							emit_warning!(
+								warning_sink,
+								"there are more than just one output file associated with the target named '{}', not supported (yet?), target will be ignored!",
+								target.name
+							);
+							continue;
+						}
+						None => {
+							emit_warning!(
+								warning_sink,
+								"could not find any output file associated with the target named '{}', target will be ignored!",
+								target.name
+							);
+							continue;
+						}
 					};
 
 					project_config.targets.insert(
@@ -240,6 +273,7 @@ impl PluginProvider for CargoPluginProvider {
 		&self,
 		project_dir: &Path,
 		extra_config_fields: &HashMap<String, toml::Value>,
+		warning_sink: &mut dyn WarningSink,
 	) -> LoadPluginResult {
 		let mut cargo_extra_config_fields = CargoPluginExtraConfigFields::default();
 
@@ -257,10 +291,7 @@ impl PluginProvider for CargoPluginProvider {
 					}
 				}
 			} else {
-				return LoadPluginResult::ExtraConfigFieldsError {
-					field_name: field_name.to_string(),
-					error: "unknown field name".to_string(),
-				};
+				emit_warning!(warning_sink, "unknown field named '{field_name}'");
 			}
 		}
 
@@ -275,8 +306,13 @@ impl PluginProvider for CargoPluginProvider {
 
 		let metadata = match metadata_command.exec() {
 			Ok(metadata) => metadata,
-			// TODO: warning?
-			Err(_) => return LoadPluginResult::NotSuitable,
+			Err(e) => {
+				emit_warning!(
+					warning_sink,
+					"Could not load cargo plugin, found Cargo.toml file but cargo metadata process failed:\n{e}\nCargo plugin will be disabled!"
+				);
+				return LoadPluginResult::NotSuitable;
+			}
 		};
 
 		LoadPluginResult::Loaded(Box::new(CargoPlugin {

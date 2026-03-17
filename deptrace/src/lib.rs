@@ -12,3 +12,6 @@ pub use target::Target;
 
 mod project;
 pub use project::{Project, resolve_project_config};
+
+mod warning_sink;
+pub use warning_sink::WarningSink;

@@ -1,6 +1,6 @@
 use clap::Parser;
 use colored::Colorize;
-use deptrace::{PluginProvider, Plugins, PluginsGenerateConfigError};
+use deptrace::{PluginProvider, Plugins, PluginsGenerateConfigError, WarningSink};
 use deptrace_cargo_plugin::CargoPluginProvider;
 use deptrace_config::{LoadProjectConfigFileError, ProjectConfigFile};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -37,7 +37,10 @@ pub struct Cli {
 	pub warnings_as_errors: bool,
 }
 impl Cli {
-	pub fn load_project_config(&mut self) -> Result<ProjectConfigFile> {
+	pub fn load_project_config(
+		&mut self,
+		warning_sink: &mut dyn WarningSink,
+	) -> Result<ProjectConfigFile> {
 		let project_dir = self.override_project_dir.clone().unwrap_or(
 			std::env::current_dir().expect("failed to get the current working directory"),
 		);
@@ -102,11 +105,15 @@ impl Cli {
 			&project_config_file.plugins,
 			plugin_providers,
 			&disabled_plugin_names,
+			warning_sink,
 		);
 
-		project_config_file =
-			Self::generate_project_config(plugins, std::mem::take(&mut project_config_file))
-				.into_diagnostic()?;
+		project_config_file = Self::generate_project_config(
+			plugins,
+			std::mem::take(&mut project_config_file),
+			warning_sink,
+		)
+		.into_diagnostic()?;
 
 		Ok(project_config_file)
 	}
@@ -154,7 +161,30 @@ impl Cli {
 	fn generate_project_config(
 		plugins: Plugins,
 		mut project_config_file: ProjectConfigFile,
+		warning_sink: &mut dyn WarningSink,
 	) -> Result<ProjectConfigFile, PluginsGenerateConfigError> {
+		struct ProgressBarWarningSink {
+			progressbar: ProgressBar,
+			warnings_count: usize,
+			plugin_name: String,
+		}
+		impl WarningSink for ProgressBarWarningSink {
+			fn emit_warning(&mut self, msg: &str) {
+				self.warnings_count += 1;
+				self.progressbar.println(format!(
+					"\n  {} from {}: {msg}",
+					"Warning".bright_yellow().bold(),
+					format!("{} plugin", self.plugin_name).cyan()
+				));
+			}
+			fn warnings_count(&self) -> usize {
+				self.warnings_count
+			}
+			fn add_to_warning_count(&mut self, extra_warning_count: usize) {
+				self.warnings_count += extra_warning_count;
+			}
+		}
+
 		let progressbar = ProgressBar::new(plugins.len() as u64).with_style(
 			ProgressStyle::with_template(
 				"{spinner:.green} {prefix:>12.cyan.bold} {msg} {pos:>5}/{len}",
@@ -166,6 +196,12 @@ impl Cli {
 		progressbar.enable_steady_tick(Duration::from_millis(100));
 
 		for (plugin_name, plugin) in plugins.into_iter() {
+			let mut progressbar_warning_sink = ProgressBarWarningSink {
+				progressbar: progressbar.clone(),
+				warnings_count: 0,
+				plugin_name: plugin_name.to_string(),
+			};
+
 			progressbar.set_message(plugin_name);
 
 			let generate_plugin_error =
@@ -185,7 +221,7 @@ impl Cli {
 			};
 
 			let plugin_project_config = plugin
-				.generate_project_config(Box::new(println_callback))
+				.generate_project_config(Box::new(println_callback), &mut progressbar_warning_sink)
 				.map_err(generate_plugin_error)?;
 			let num_plugin_targets = plugin_project_config.targets.len();
 			let num_plugin_dependency_declarations =
@@ -202,6 +238,8 @@ impl Cli {
 			));
 
 			progressbar.inc(1);
+
+			warning_sink.add_to_warning_count(progressbar_warning_sink.warnings_count());
 		}
 
 		let total_num_targets = project_config_file.config.targets.len();

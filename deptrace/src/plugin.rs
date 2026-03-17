@@ -2,12 +2,15 @@ use deptrace_config::{PluginConfig, ProjectConfig};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
+use crate::{WarningSink, emit_warning};
+
 pub type PluginPrintlnCallback = Box<dyn Fn(String)>;
 
 pub trait Plugin {
 	fn generate_project_config(
 		&self,
 		println_callback: PluginPrintlnCallback,
+		warning_sink: &mut dyn WarningSink,
 	) -> Result<ProjectConfig, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -30,8 +33,8 @@ pub trait PluginProvider {
 	fn try_load_plugin(
 		&self,
 		project_dir: &Path,
-
 		fields: &HashMap<String, toml::Value>,
+		warning_sink: &mut dyn WarningSink,
 	) -> LoadPluginResult;
 }
 
@@ -54,6 +57,7 @@ impl Plugins {
 		plugin_configs: &HashMap<String, PluginConfig>,
 		plugin_providers: Vec<Box<dyn PluginProvider>>,
 		disabled_plugin_names: &[String],
+		warning_sink: &mut dyn WarningSink,
 	) -> Self {
 		let mut suitable_plugins = HashMap::new();
 
@@ -66,15 +70,18 @@ impl Plugins {
 			let default_plugin_config = PluginConfig::default();
 			let plugin_config = plugin_configs.get(name).unwrap_or(&default_plugin_config);
 
-			match plugin_provider.try_load_plugin(project_dir.as_ref(), &plugin_config.extra_fields)
-			{
+			match plugin_provider.try_load_plugin(
+				project_dir.as_ref(),
+				&plugin_config.extra_fields,
+				warning_sink,
+			) {
 				LoadPluginResult::Loaded(plugin) => {
 					suitable_plugins.insert(name, plugin);
 				}
 				LoadPluginResult::NotSuitable => {}
 				LoadPluginResult::ExtraConfigFieldsError { field_name, error } => {
-					// TODO: proper warning
-					println!(
+					emit_warning!(
+						warning_sink,
 						"plugin '{name}' had an error with the extra config field '{field_name}': {error}"
 					);
 				}

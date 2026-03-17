@@ -51,7 +51,10 @@ impl ProjectConfigFile {
 			.unwrap_or("<unknown filename>".to_string());
 
 		toml::from_str(&content).map_err(|cause| {
-			let span = cause.span().map(|range| range.into()).unwrap(); //.unwrap_or((0..0).into());
+			let span = cause
+				.span()
+				.map(|range| range.into())
+				.unwrap_or((0..0).into());
 			Box::new(LoadProjectConfigFileError::Toml {
 				toml_error_msg: TomlDeErrorMsg(cause.message().to_string()),
 				source_code: NamedSource::new(filename, content),

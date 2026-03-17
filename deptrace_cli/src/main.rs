@@ -1,15 +1,16 @@
 use clap::Parser;
 use colored::Colorize;
-use deptrace::{Target, resolve_project_config};
+use deptrace::{Target, WarningSink, emit_warning, resolve_project_config};
 use deptrace_cli::Cli;
 use lddtree::{DependencyAnalyzer, Library};
 use miette::{IntoDiagnostic, Result, miette};
 
 fn main() -> Result<()> {
 	let mut cli = Cli::parse();
+	let mut cli_warning_sink = CliWarningSink::default();
 	let mut warnings_as_errors = cli.warnings_as_errors;
 
-	let project_config_file = cli.load_project_config()?;
+	let project_config_file = cli.load_project_config(&mut cli_warning_sink)?;
 	warnings_as_errors = warnings_as_errors || project_config_file.warnings_as_errors;
 
 	println!("project config: {project_config_file:#?}");
@@ -24,16 +25,41 @@ fn main() -> Result<()> {
 				));
 			};
 
-			analyze_target(target, warnings_as_errors)?;
+			analyze_target(target, &mut cli_warning_sink)?;
 		}
 		None => {
 			for target in project.targets.values() {
-				analyze_target(target, warnings_as_errors)?;
+				analyze_target(target, &mut cli_warning_sink)?;
 			}
 		}
 	}
 
-	Ok(())
+	if warnings_as_errors && cli_warning_sink.encountered_any_warnings() {
+		Err(miette!(
+			"returning error exit code as warnings_as_errors is enabled and {} warnings were encountered",
+			cli_warning_sink.warnings_count()
+		))
+	} else {
+		Ok(())
+	}
+}
+
+#[derive(Debug, Clone, Default)]
+struct CliWarningSink {
+	warnings_count: usize,
+}
+impl WarningSink for CliWarningSink {
+	fn emit_warning(&mut self, msg: &str) {
+		self.warnings_count += 1;
+
+		println!("\n{}: {msg}", "Warning".bright_yellow().bold());
+	}
+	fn warnings_count(&self) -> usize {
+		self.warnings_count
+	}
+	fn add_to_warning_count(&mut self, extra_warning_count: usize) {
+		self.warnings_count += extra_warning_count;
+	}
 }
 
 fn print_lib_info(name: &str, lib: &Library) {
@@ -44,11 +70,7 @@ fn print_lib_info(name: &str, lib: &Library) {
 	}
 }
 
-fn print_warning(msg: impl AsRef<str>) {
-	println!("{}: {}", "Warning".bright_yellow().bold(), msg.as_ref());
-}
-
-fn analyze_target(target: &Target, warnings_as_errors: bool) -> Result<()> {
+fn analyze_target(target: &Target, warning_sink: &mut dyn WarningSink) -> Result<()> {
 	let deps = DependencyAnalyzer::default()
 		.analyze(&target.filepath)
 		.unwrap();
@@ -68,11 +90,6 @@ fn analyze_target(target: &Target, warnings_as_errors: bool) -> Result<()> {
 		}
 	}
 
-	let mut encountered_warning = false;
-	if !undocumented_dependencies.is_empty() {
-		encountered_warning = true;
-	}
-
 	println!(
 		"\n{}:\n  {}",
 		"Direct dependencies".bright_green(),
@@ -85,9 +102,7 @@ fn analyze_target(target: &Target, warnings_as_errors: bool) -> Result<()> {
 	}
 
 	if !undocumented_dependencies.is_empty() {
-		encountered_warning = true;
-		println!();
-		print_warning("Some dependencies are not documented!");
+		warning_sink.emit_warning("\nSome dependencies are not documented!");
 		for (name, lib) in undocumented_dependencies {
 			print_lib_info(name, lib);
 		}
@@ -105,17 +120,11 @@ fn analyze_target(target: &Target, warnings_as_errors: bool) -> Result<()> {
 		})
 		.collect::<Vec<_>>();
 	if !not_installed_dependency_names.is_empty() {
-		encountered_warning = true;
-		println!();
-		print_warning("Some dependencies are missing on your system:");
-
-		println!("  {}", not_installed_dependency_names.join(", "));
-	}
-
-	if warnings_as_errors && encountered_warning {
-		return Err(miette!(
-			"returning error exit code as warnings_as_errors is on and warnings where encountered"
-		));
+		emit_warning!(
+			warning_sink,
+			"Some dependencies are missing on your system:\n  {}",
+			not_installed_dependency_names.join(", ")
+		);
 	}
 
 	Ok(())
