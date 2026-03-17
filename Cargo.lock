@@ -223,6 +223,7 @@ dependencies = [
  "lddtree",
  "serde",
  "thiserror",
+ "toml",
 ]
 
 [[package]]
@@ -233,7 +234,9 @@ dependencies = [
  "colored",
  "deptrace",
  "deptrace_config",
+ "serde",
  "thiserror",
+ "toml",
 ]
 
 [[package]]
@@ -248,6 +251,7 @@ dependencies = [
  "indicatif",
  "lddtree",
  "miette",
+ "toml",
 ]
 
 [[package]]

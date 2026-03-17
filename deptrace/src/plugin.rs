@@ -1,4 +1,4 @@
-use deptrace_config::ProjectConfig;
+use deptrace_config::{PluginConfig, ProjectConfig};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
@@ -11,12 +11,28 @@ pub trait Plugin {
 	) -> Result<ProjectConfig, Box<dyn std::error::Error + Send + Sync>>;
 }
 
+pub enum LoadPluginResult {
+	Loaded(Box<dyn Plugin>),
+	/// plugin will not load this project
+	NotSuitable,
+	/// plugin found something wrong regarding its extra config fields
+	ExtraConfigFieldsError {
+		field_name: String,
+		error: String,
+	},
+}
+
 pub trait PluginProvider {
 	fn get_plugin_name(&self) -> &'static str;
 
-	/// plugin providers should return None as soon as possible if they know the project does not
+	/// plugin providers should return `LoadPluginResult::NotSuitable` as soon as possible if they know the project does not
 	/// fit this plugin
-	fn try_load_plugin(&self, project_dir: &Path) -> Option<Box<dyn Plugin>>;
+	fn try_load_plugin(
+		&self,
+		project_dir: &Path,
+
+		fields: &HashMap<String, toml::Value>,
+	) -> LoadPluginResult;
 }
 
 #[derive(Debug, Error)]
@@ -35,6 +51,7 @@ impl Plugins {
 	/// loads suitable plugins given the project, excluding the explicitly disabled ones ofc
 	pub fn load_suitable(
 		project_dir: impl AsRef<Path>,
+		plugin_configs: &HashMap<String, PluginConfig>,
 		plugin_providers: Vec<Box<dyn PluginProvider>>,
 		disabled_plugin_names: &[String],
 	) -> Self {
@@ -46,8 +63,21 @@ impl Plugins {
 				continue;
 			}
 
-			if let Some(plugin) = plugin_provider.try_load_plugin(project_dir.as_ref()) {
-				suitable_plugins.insert(name, plugin);
+			let default_plugin_config = PluginConfig::default();
+			let plugin_config = plugin_configs.get(name).unwrap_or(&default_plugin_config);
+
+			match plugin_provider.try_load_plugin(project_dir.as_ref(), &plugin_config.extra_fields)
+			{
+				LoadPluginResult::Loaded(plugin) => {
+					suitable_plugins.insert(name, plugin);
+				}
+				LoadPluginResult::NotSuitable => {}
+				LoadPluginResult::ExtraConfigFieldsError { field_name, error } => {
+					// TODO: proper warning
+					println!(
+						"plugin '{name}' had an error with the extra config field '{field_name}': {error}"
+					);
+				}
 			}
 		}
 

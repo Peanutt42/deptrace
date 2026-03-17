@@ -11,8 +11,9 @@ path = "src/main.rs"
 deptrace = { path = "../deptrace" }
 deptrace_config = { path = "../deptrace_config" }
 deptrace_cargo_plugin = { path = "../plugins/cargo" }
+colored = { workspace = true }
+toml = { workspace = true }
 lddtree = "0.5.0"
 clap = { version = "4.5.60", features = ["derive"] }
-colored = { workspace = true }
 miette = { version = "7.6.0", features = ["fancy"] }
 indicatif = "0.18.4"

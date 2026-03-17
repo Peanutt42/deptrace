@@ -8,4 +8,6 @@ deptrace = { path = "../../deptrace" }
 deptrace_config = { path = "../../deptrace_config" }
 thiserror = { workspace = true }
 colored = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
 cargo_metadata = "0.23.1"

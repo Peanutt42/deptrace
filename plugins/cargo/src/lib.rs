@@ -1,9 +1,10 @@
 use cargo_metadata::{Metadata, MetadataCommand};
 use colored::Colorize;
-use deptrace::{Plugin, PluginPrintlnCallback, PluginProvider};
+use deptrace::{LoadPluginResult, Plugin, PluginPrintlnCallback, PluginProvider};
 use deptrace_config::{
 	DependencyConfig, DependencyKind, DependencyNameOrDependencyConfig, ProjectConfig, TargetConfig,
 };
+use serde::Deserialize;
 use std::{
 	collections::HashMap,
 	io::BufReader,
@@ -22,25 +23,41 @@ pub enum CargoPluginGenerateError {
 		"did not find artifact filepath in the artifact output of cargo metadata with name '{artifact_name}'"
 	)]
 	DidNotFindArtifactOutputFilepath { artifact_name: String },
+	#[error("the plugin cargo does not have a config field named '{field_name}'")]
+	InvalidCargoExtraConfigField { field_name: String },
+}
+
+#[derive(Default, Deserialize)]
+struct CargoPluginExtraConfigFields {
+	extra_cargo_args: Vec<String>,
 }
 
 pub struct CargoPlugin {
 	project_dir: PathBuf,
 	cargo_metadata: Metadata,
+	extra_config_fields: CargoPluginExtraConfigFields,
 }
 impl Plugin for CargoPlugin {
-	// TODO: parse output of `cargo build --message-format=json` in order to get the executable
-	// paths of targets / filenames of shared libraries
-	// (dx: forward any non json lines with a println, so we have the expected cargo build compiler
-	// messages)
 	fn generate_project_config(
 		&self,
 		println_callback: PluginPrintlnCallback,
 	) -> Result<ProjectConfig, Box<dyn std::error::Error + Send + Sync>> {
-		println_callback(format!("{} cargo build...", "Running".green()));
+		let extra_cargo_args_str = self
+			.extra_config_fields
+			.extra_cargo_args
+			.clone()
+			.into_iter()
+			.map(|a| format!(" {a}"))
+			.collect::<String>();
+		println_callback(format!(
+			"{} cargo build{extra_cargo_args_str}...",
+			"Running".green()
+		));
 
+		let mut args = vec!["build".to_string(), "--message-format=json".to_string()];
+		args.extend_from_slice(&self.extra_config_fields.extra_cargo_args);
 		let mut cmd = Command::new("cargo")
-			.args(["build", "--message-format=json"])
+			.args(args)
 			.current_dir(&self.cargo_metadata.workspace_root)
 			.stdout(Stdio::piped())
 			.stderr(Stdio::piped())
@@ -78,9 +95,6 @@ impl Plugin for CargoPlugin {
 					}
 					cargo_metadata::Message::CompilerMessage(msg) => {
 						println_callback(msg.message.rendered.unwrap_or(msg.message.message));
-						for child_msg in msg.message.children {
-							println_callback(child_msg.rendered.unwrap_or(child_msg.message));
-						}
 					}
 					cargo_metadata::Message::BuildScriptExecuted(build_script) => {
 						if let Some(package) = self
@@ -222,21 +236,53 @@ impl PluginProvider for CargoPluginProvider {
 		"cargo"
 	}
 
-	fn try_load_plugin(&self, project_dir: &Path) -> Option<Box<dyn Plugin>> {
+	fn try_load_plugin(
+		&self,
+		project_dir: &Path,
+		extra_config_fields: &HashMap<String, toml::Value>,
+	) -> LoadPluginResult {
+		let mut cargo_extra_config_fields = CargoPluginExtraConfigFields::default();
+
+		for (field_name, field_value) in extra_config_fields.iter() {
+			if field_name == "extra_cargo_args" {
+				match Vec::<String>::deserialize(field_value.clone()) {
+					Ok(args) => {
+						cargo_extra_config_fields.extra_cargo_args = args;
+					}
+					Err(error) => {
+						return LoadPluginResult::ExtraConfigFieldsError {
+							field_name: field_name.to_string(),
+							error: format!("{error}"),
+						};
+					}
+				}
+			} else {
+				return LoadPluginResult::ExtraConfigFieldsError {
+					field_name: field_name.to_string(),
+					error: "unknown field name".to_string(),
+				};
+			}
+		}
+
 		// if there is no Cargo.toml, we dont enable the CargoPlugin, eventhough there could be a
 		// cargo workspace in a parent directory
 		if !project_dir.join("Cargo.toml").exists() {
-			return None;
+			return LoadPluginResult::NotSuitable;
 		}
 
 		let mut metadata_command = MetadataCommand::new();
 		metadata_command.current_dir(project_dir);
 
-		let metadata = metadata_command.exec().ok()?;
+		let metadata = match metadata_command.exec() {
+			Ok(metadata) => metadata,
+			// TODO: warning?
+			Err(_) => return LoadPluginResult::NotSuitable,
+		};
 
-		Some(Box::new(CargoPlugin {
+		LoadPluginResult::Loaded(Box::new(CargoPlugin {
 			project_dir: project_dir.to_path_buf(),
 			cargo_metadata: metadata,
+			extra_config_fields: cargo_extra_config_fields,
 		}))
 	}
 }

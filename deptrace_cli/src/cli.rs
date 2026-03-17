@@ -2,11 +2,12 @@ use clap::Parser;
 use colored::Colorize;
 use deptrace::{PluginProvider, Plugins, PluginsGenerateConfigError};
 use deptrace_cargo_plugin::CargoPluginProvider;
-use deptrace_config::{LoadProjectConfigFileError, ProjectConfig, ProjectConfigFile};
+use deptrace_config::{LoadProjectConfigFileError, ProjectConfigFile};
 use indicatif::{ProgressBar, ProgressStyle};
 use miette::{IntoDiagnostic, Result, miette};
 use std::{
 	path::{Path, PathBuf},
+	str::FromStr,
 	time::Duration,
 };
 
@@ -24,10 +25,13 @@ pub struct Cli {
 	/// './deptrace.toml' and for './.deptrace.toml'
 	#[arg(long)]
 	pub override_project_config_file: Option<PathBuf>,
-	/// (optional) list of plugins that should not be loaded (additional to the `disabled_plugins`
-	/// in the project configuration file)
+	/// (optional) list of plugins that should not be loaded (even if they are enabled in the
+	/// config file)
 	#[arg(long)]
 	pub disabled_plugins: Vec<String>,
+	/// 3 args: plugin name, field name and toml value to override a plugin config field
+	#[arg(long, num_args = 3, value_names = ["PLUGIN", "TOML VALUE"], action = clap::ArgAction::Append)]
+	pub override_plugin_config: Vec<String>,
 	/// (optional) treats every warning as a error
 	#[arg(long, default_value_t = false)]
 	pub warnings_as_errors: bool,
@@ -50,6 +54,22 @@ impl Cli {
 					})
 					.unwrap_or((ProjectConfigFile::default(), None)),
 			};
+
+		for args in self.override_plugin_config.chunks(3) {
+			let plugin_name = args[0].to_string();
+			let field_name = args[1].to_string();
+			let Ok(toml_value) = toml::Value::from_str(&args[2]) else {
+				return Err(miette!(
+					"failed to parse toml value of plugin config override field '{field_name}' for plugin '{plugin_name}'"
+				));
+			};
+			project_config_file
+				.plugins
+				.entry(plugin_name)
+				.or_default()
+				.extra_fields
+				.insert(field_name, toml_value);
+		}
 
 		if let Some(project_config_filepath) = project_config_filepath {
 			let num_config_targets = project_config_file.config.targets.len();
@@ -77,11 +97,15 @@ impl Cli {
 			.collect::<Vec<_>>();
 		disabled_plugin_names.append(&mut self.disabled_plugins.clone());
 
-		let plugins =
-			Plugins::load_suitable(&project_dir, plugin_providers, &disabled_plugin_names);
+		let plugins = Plugins::load_suitable(
+			&project_dir,
+			&project_config_file.plugins,
+			plugin_providers,
+			&disabled_plugin_names,
+		);
 
-		project_config_file.config =
-			Self::generate_project_config(plugins, project_config_file.config.clone())
+		project_config_file =
+			Self::generate_project_config(plugins, std::mem::take(&mut project_config_file))
 				.into_diagnostic()?;
 
 		Ok(project_config_file)
@@ -129,8 +153,8 @@ impl Cli {
 
 	fn generate_project_config(
 		plugins: Plugins,
-		mut project_config: ProjectConfig,
-	) -> Result<ProjectConfig, PluginsGenerateConfigError> {
+		mut project_config_file: ProjectConfigFile,
+	) -> Result<ProjectConfigFile, PluginsGenerateConfigError> {
 		let progressbar = ProgressBar::new(plugins.len() as u64).with_style(
 			ProgressStyle::with_template(
 				"{spinner:.green} {prefix:>12.cyan.bold} {msg} {pos:>5}/{len}",
@@ -167,27 +191,29 @@ impl Cli {
 			let num_plugin_dependency_declarations =
 				plugin_project_config.count_dependency_declarations();
 
-			project_config = project_config
+			project_config_file.config = project_config_file
+				.config
 				.merge(plugin_project_config)
 				.map_err(|e| generate_plugin_error(Box::new(e)))?;
 
 			progressbar.println(format!(
-				"{:>14} {plugin_name} plugin ({num_plugin_targets} targets, {num_plugin_dependency_declarations} dependency declarations)",
+				"{:>9} {plugin_name} plugin ({num_plugin_targets} targets, {num_plugin_dependency_declarations} dependency declarations)",
 				"Generated".green().bold()
 			));
 
 			progressbar.inc(1);
 		}
 
-		let total_num_targets = project_config.targets.len();
-		let total_num_dependency_declarations = project_config.count_dependency_declarations();
+		let total_num_targets = project_config_file.config.targets.len();
+		let total_num_dependency_declarations =
+			project_config_file.config.count_dependency_declarations();
 
 		progressbar.finish_and_clear();
 		println!(
-			"{:>14} ({total_num_targets} targets, {total_num_dependency_declarations} dependency declarations)",
+			"{:>9} ({total_num_targets} targets, {total_num_dependency_declarations} dependency declarations)",
 			"Finished".green().bold()
 		);
 
-		Ok(project_config)
+		Ok(project_config_file)
 	}
 }

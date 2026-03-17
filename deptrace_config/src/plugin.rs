@@ -13,3 +13,11 @@ pub struct PluginConfig {
 	#[serde(flatten)]
 	pub extra_fields: HashMap<String, toml::Value>,
 }
+impl Default for PluginConfig {
+	fn default() -> Self {
+		Self {
+			enabled: default_enabled(),
+			extra_fields: HashMap::default(),
+		}
+	}
+}

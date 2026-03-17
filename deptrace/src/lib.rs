@@ -1,6 +1,7 @@
 mod plugin;
 pub use plugin::{
-	Plugin, PluginPrintlnCallback, PluginProvider, Plugins, PluginsGenerateConfigError,
+	LoadPluginResult, Plugin, PluginPrintlnCallback, PluginProvider, Plugins,
+	PluginsGenerateConfigError,
 };
 
 mod dependency;
