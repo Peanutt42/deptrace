@@ -64,7 +64,17 @@ impl Cli {
 
 		let plugin_providers: Vec<Box<dyn PluginProvider>> = vec![Box::new(CargoPluginProvider)];
 
-		let mut disabled_plugin_names = project_config_file.disabled_plugins.clone();
+		let mut disabled_plugin_names = project_config_file
+			.plugins
+			.iter()
+			.filter_map(|(plugin_name, plugin_config)| {
+				if plugin_config.enabled {
+					None
+				} else {
+					Some(plugin_name.clone())
+				}
+			})
+			.collect::<Vec<_>>();
 		disabled_plugin_names.append(&mut self.disabled_plugins.clone());
 
 		let plugins =

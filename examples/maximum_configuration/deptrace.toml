@@ -1,7 +1,5 @@
 # (optional)
 name = "maximum_configuration"
-# remove cargo plugin in order to manually configure everything
-disabled_plugins = ["cargo"]
 
 
 # OPTION 1: declare "workspace/project" wide dependencies, usefull when they are reused
@@ -20,3 +18,7 @@ filepath = "../../target/debug/maximum_configuration"
 dependencies = [
 	{ name = "foo_lib", kind = "Runtime", provides = ["libfoo_lib.so", "foo_lib.dll", "foo_lib.dylib"] }
 ]
+
+# remove cargo plugin in order to manually configure everything
+[plugins.cargo]
+enabled = false

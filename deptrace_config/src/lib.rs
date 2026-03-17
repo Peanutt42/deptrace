@@ -8,3 +8,6 @@ pub use project::{LoadProjectConfigFileError, ProjectConfig, ProjectConfigFile};
 
 mod target;
 pub use target::TargetConfig;
+
+mod plugin;
+pub use plugin::PluginConfig;

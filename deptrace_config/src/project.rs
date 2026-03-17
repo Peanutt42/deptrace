@@ -1,7 +1,7 @@
 #![allow(unused_assignments)] // miette actually reads those values, see
 // `LoadProjectConfigFileError`
 
-use crate::{DependencyConfig, DependencyNameOrDependencyConfig, TargetConfig};
+use crate::{DependencyConfig, DependencyNameOrDependencyConfig, PluginConfig, TargetConfig};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
@@ -27,16 +27,16 @@ pub enum LoadProjectConfigFileError {
 }
 
 /// Configuration of a project
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectConfigFile {
 	#[serde(flatten, default)]
 	pub config: ProjectConfig,
 	/// treat warnings as errors, exiting with exit code on warnings
 	#[serde(default)]
 	pub warnings_as_errors: bool,
-	/// list of plugin names to explicitly not automatically load for this project
+	/// map of plugin names to their config
 	#[serde(default)]
-	pub disabled_plugins: Vec<String>,
+	pub plugins: HashMap<String, PluginConfig>,
 }
 impl ProjectConfigFile {
 	pub fn read_from_file(
