@@ -1,0 +1,13 @@
+
+
+[dependencies]
+foo0 = { kind = "Runtime", subdependencies = ["foo1"] }
+foo1 = { kind = "Runtime", subdependencies = ["foo2"] }
+foo2 = { kind = "Runtime", subdependencies = ["foo3"] }
+foo3 = { kind = "Runtime", subdependencies = ["foo4"] }
+foo4 = { kind = "Runtime", subdependencies = ["foo5"] }
+foo5 = { kind = "Runtime", subdependencies = ["foo6"] }
+foo6 = { kind = "Runtime", subdependencies = ["foo7"] }
+foo7 = { kind = "Runtime", subdependencies = ["foo5"] }
+foo8 = { kind = "Runtime", subdependencies = ["foo9"] }
+foo9 = { kind = "Runtime", subdependencies = [] }

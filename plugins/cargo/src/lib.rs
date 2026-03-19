@@ -74,6 +74,7 @@ impl Plugin for CargoPlugin {
 
 		struct ArtifactLinkedLibsInfo {
 			linked_lib_names: Vec<String>,
+			// TODO
 			linked_lib_search_paths: Vec<PathBuf>,
 		}
 		let mut artifact_linked_libs: HashMap<String, ArtifactLinkedLibsInfo> = HashMap::new();

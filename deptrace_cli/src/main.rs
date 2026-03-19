@@ -25,11 +25,11 @@ fn main() -> Result<()> {
 				));
 			};
 
-			analyze_target(target, &mut cli_warning_sink)?;
+			analyze_target(&target_name, target, &mut cli_warning_sink)?;
 		}
 		None => {
-			for target in project.targets.values() {
-				analyze_target(target, &mut cli_warning_sink)?;
+			for (target_name, target) in project.targets.iter() {
+				analyze_target(target_name, target, &mut cli_warning_sink)?;
 			}
 		}
 	}
@@ -70,7 +70,21 @@ fn print_lib_info(name: &str, lib: &Library) {
 	}
 }
 
-fn analyze_target(target: &Target, warning_sink: &mut dyn WarningSink) -> Result<()> {
+fn analyze_target(
+	target_name: &str,
+	target: &Target,
+	warning_sink: &mut dyn WarningSink,
+) -> Result<()> {
+	println!(
+		"\n\n{}",
+		format!(
+			" === Analyzing target {target_name} ({}) ===",
+			target.filepath.display()
+		)
+		.bright_blue()
+		.bold()
+	);
+
 	let deps = DependencyAnalyzer::default()
 		.analyze(&target.filepath)
 		.unwrap();
@@ -108,6 +122,7 @@ fn analyze_target(target: &Target, warning_sink: &mut dyn WarningSink) -> Result
 		}
 	}
 
+	// TODO: also report whether the missing deps are Runtime or Build
 	let not_installed_dependency_names = deps
 		.libraries
 		.iter()

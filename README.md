@@ -34,6 +34,7 @@ Additionally, you can explicitly configure the tartets and their dependencies us
 - [ ] strace style runtime analysis and verification of what other libraries are dynamically loaded, what system files are read that maybe are provided by system packages
 - [ ] Cargo plugin
 - [ ] CMake plugin
+- [ ] make targets/dependencies produced by cargo/etc. plugin have a "cargo:name" prefix do avoid complications?
 - [ ] documentation/guide how to:
     - [ ] configure your project to use deptrace
     - [ ] configure your project to be able to be used by other projects using deptrace

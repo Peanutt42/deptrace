@@ -13,7 +13,7 @@ pub struct TomlDeErrorMsg(String);
 
 #[derive(Debug, Error, Diagnostic)]
 pub enum LoadProjectConfigFileError {
-	#[error("faield to read file: {0}")]
+	#[error("failed to read file: {0}")]
 	IO(#[from] std::io::Error),
 	#[error("failed to load project config file")]
 	Toml {

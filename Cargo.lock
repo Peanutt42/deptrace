@@ -220,6 +220,7 @@ name = "deptrace"
 version = "0.1.0"
 dependencies = [
  "deptrace_config",
+ "indexmap",
  "lddtree",
  "serde",
  "thiserror",
