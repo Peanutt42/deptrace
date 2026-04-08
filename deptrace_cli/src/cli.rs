@@ -302,13 +302,12 @@ impl Cli {
 		all_plugin_names: &HashSet<&'static str>,
 		warning_sink: &mut dyn WarningSink,
 	) {
-		if let NormalOrPluginName::Normal(name) = name
-			&& let Some((prefix, _)) = name.split_once(':')
-			&& all_plugin_names.contains(&prefix)
+		if let NormalOrPluginName::Plugin { plugin_name, .. } = name
+			&& all_plugin_names.contains(plugin_name.as_str())
 		{
 			emit_warning!(
 				warning_sink,
-				"the non-plugin {kind} '{name}' should not use the plugin prefix '{prefix}:', that is meant for {kind} created by that plugin!"
+				"the non-plugin {kind} '{name}' should not use the plugin prefix '{plugin_name}:', that is meant for {kind} created by that plugin!"
 			);
 		}
 	}
