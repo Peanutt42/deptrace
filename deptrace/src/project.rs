@@ -1,7 +1,7 @@
 use crate::{Dependency, Target};
 use deptrace_config::{
 	DependencyConfig, DependencyKind, DependencyNameOrDependencyConfig, NamedDependencyConfig,
-	ProjectConfig,
+	NormalOrPluginName, ProjectConfig,
 };
 use indexmap::IndexSet;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
@@ -10,14 +10,14 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
 	pub name: Option<String>,
-	pub targets: HashMap<String, Target>,
-	pub dependencies: HashMap<String, Arc<Dependency>>,
+	pub targets: HashMap<NormalOrPluginName, Target>,
+	pub dependencies: HashMap<NormalOrPluginName, Arc<Dependency>>,
 }
 impl Project {
 	pub fn new(
 		name: Option<String>,
-		targets: HashMap<String, Target>,
-		dependencies: HashMap<String, Arc<Dependency>>,
+		targets: HashMap<NormalOrPluginName, Target>,
+		dependencies: HashMap<NormalOrPluginName, Arc<Dependency>>,
 	) -> Self {
 		Self {
 			name,
@@ -31,12 +31,12 @@ impl Project {
 pub enum ResolveProjectError {
 	#[error("unresolved dependency '{dep_name}'")]
 	UnresolvedDependency {
-		dep_name: String,
+		dep_name: NormalOrPluginName,
 		// usage_source: Source,
 	},
 	#[error("dublicate dependency definition of '{dep_name}'")]
 	DublicateDependencyDefinition {
-		dep_name: String,
+		dep_name: NormalOrPluginName,
 		// first_source: Source,
 		// dublicate_source: Source,
 	},
@@ -57,7 +57,7 @@ pub fn resolve_project_config(
 	// then, iteratively resolve all subdeps of the declared dependencies, until everything is
 	// resolved
 	let partially_unresolved_dependencies: HashMap<
-		String,
+		NormalOrPluginName,
 		Rc<RefCell<PartiallyUnresolvedDependency>>,
 	> = unresolved_project_dependency_declarations
 		.into_iter()
@@ -85,8 +85,7 @@ pub fn resolve_project_config(
 	for dep in partially_unresolved_dependencies.values() {
 		for subdep in dep.borrow_mut().subdependencies.iter_mut() {
 			if let UnresolvedOrPartiallyUnresolvedDependency::Unresolved(subdep_name) = subdep {
-				let Some(subdep_ref) = partially_unresolved_dependencies.get(subdep_name.as_str())
-				else {
+				let Some(subdep_ref) = partially_unresolved_dependencies.get(subdep_name) else {
 					return Err(ResolveProjectError::UnresolvedDependency {
 						dep_name: subdep_name.clone(),
 					});
@@ -97,7 +96,8 @@ pub fn resolve_project_config(
 	}
 
 	// phase 3
-	let mut resolved_project_dependencies: HashMap<String, Arc<Dependency>> = HashMap::new();
+	let mut resolved_project_dependencies: HashMap<NormalOrPluginName, Arc<Dependency>> =
+		HashMap::new();
 	for dep in partially_unresolved_dependencies.into_values() {
 		match dep
 			.borrow()
@@ -114,7 +114,7 @@ pub fn resolve_project_config(
 		};
 	}
 
-	let mut targets: HashMap<String, Target> = HashMap::new();
+	let mut targets: HashMap<NormalOrPluginName, Target> = HashMap::new();
 
 	for (target_name, target_config) in project_config.targets {
 		let mut resolved_target_dependencies = HashMap::new();
@@ -133,7 +133,7 @@ pub fn resolve_project_config(
 		}
 
 		targets.insert(
-			target_name.to_string(),
+			target_name,
 			Target::new(target_config.filepath, resolved_target_dependencies),
 		);
 	}
@@ -147,7 +147,7 @@ pub fn resolve_project_config(
 
 fn collect_unresolved_project_dependency_declarations(
 	project_config: &ProjectConfig,
-) -> Result<HashMap<String, DependencyConfig>, ResolveProjectError> {
+) -> Result<HashMap<NormalOrPluginName, DependencyConfig>, ResolveProjectError> {
 	let mut unresolved_project_dependency_declarations = project_config.dependencies.clone();
 	for dep in project_config.dependencies.values() {
 		collect_unresolved_dependency_declarations(
@@ -168,7 +168,10 @@ fn collect_unresolved_project_dependency_declarations(
 /// recursively collects all dependency declarations, especially inside the subdependencies
 fn collect_unresolved_dependency_declarations(
 	subdeps: &[DependencyNameOrDependencyConfig],
-	out_unresolved_project_dependency_declarations: &mut HashMap<String, DependencyConfig>,
+	out_unresolved_project_dependency_declarations: &mut HashMap<
+		NormalOrPluginName,
+		DependencyConfig,
+	>,
 ) -> Result<(), ResolveProjectError> {
 	for subdep in subdeps {
 		if let DependencyNameOrDependencyConfig::Config(named_subdep_config) = subdep {
@@ -198,10 +201,10 @@ fn collect_unresolved_dependency_declarations(
 /// configuration brings
 #[derive(Debug, Clone)]
 struct UnresolvedDependencyRefSubdependencyOnly {
-	name: String,
+	name: NormalOrPluginName,
 	kinds: Vec<DependencyKind>,
 	provides: Vec<String>,
-	subdependencies: Vec<String>,
+	subdependencies: Vec<NormalOrPluginName>,
 }
 impl From<NamedDependencyConfig> for UnresolvedDependencyRefSubdependencyOnly {
 	fn from(value: NamedDependencyConfig) -> Self {
@@ -224,7 +227,7 @@ impl From<NamedDependencyConfig> for UnresolvedDependencyRefSubdependencyOnly {
 
 #[derive(Debug, Clone)]
 struct PartiallyUnresolvedDependency {
-	name: String,
+	name: NormalOrPluginName,
 	kinds: Vec<DependencyKind>,
 	provides: Vec<String>,
 	subdependencies: Vec<UnresolvedOrPartiallyUnresolvedDependency>,
@@ -233,7 +236,7 @@ struct PartiallyUnresolvedDependency {
 impl PartiallyUnresolvedDependency {
 	fn try_to_resolve(
 		self,
-		resolved_project_dependencies: &mut HashMap<String, Arc<Dependency>>,
+		resolved_project_dependencies: &mut HashMap<NormalOrPluginName, Arc<Dependency>>,
 	) -> Result<(), ResolveDependencyError> {
 		// ignore the Ok value
 		self.try_to_resolve_impl(resolved_project_dependencies, &mut IndexSet::new())
@@ -243,9 +246,9 @@ impl PartiallyUnresolvedDependency {
 	/// IndexSet preserves the insertion order
 	fn try_to_resolve_impl(
 		self,
-		resolved_project_dependencies: &mut HashMap<String, Arc<Dependency>>,
-		visited_dep_names: &mut IndexSet<String>,
-	) -> Result<(String, Arc<Dependency>), ResolveDependencyError> {
+		resolved_project_dependencies: &mut HashMap<NormalOrPluginName, Arc<Dependency>>,
+		visited_dep_names: &mut IndexSet<NormalOrPluginName>,
+	) -> Result<(NormalOrPluginName, Arc<Dependency>), ResolveDependencyError> {
 		if let Some(resolved_dep) = resolved_project_dependencies.get(&self.name) {
 			return Ok((self.name, resolved_dep.clone()));
 		}
@@ -294,7 +297,7 @@ impl PartiallyUnresolvedDependency {
 }
 #[derive(Debug, Clone)]
 enum UnresolvedOrPartiallyUnresolvedDependency {
-	Unresolved(String),
+	Unresolved(NormalOrPluginName),
 	Partially(Rc<RefCell<PartiallyUnresolvedDependency>>),
 }
 #[derive(Debug, Clone, Error)]
@@ -302,7 +305,7 @@ enum ResolveDependencyError {
 	#[error(
 		"unresolved dependency '{0}' even though at this point, there should not be any more unresolved dependencies"
 	)]
-	UnresolvedDependency(String),
+	UnresolvedDependency(NormalOrPluginName),
 	#[error("cyclic dependency detected: {dependency_cicle}")]
 	CyclicDependency { dependency_cicle: DependencyCycle },
 }
@@ -310,11 +313,11 @@ enum ResolveDependencyError {
 /// list of the dependency chain of a dependency cicle:
 /// given a n entries, the cicle based on indices would look like this: 0 -> 1 -> 2 -> ... -> n -> 0
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DependencyCycle(pub IndexSet<String>);
+pub struct DependencyCycle(pub IndexSet<NormalOrPluginName>);
 impl DependencyCycle {
 	pub fn from_visited_dependencies(
-		visited_dependencies: IndexSet<String>,
-		cycle_start_dep_name: String,
+		visited_dependencies: IndexSet<NormalOrPluginName>,
+		cycle_start_dep_name: NormalOrPluginName,
 	) -> Self {
 		let mut found_cycle_start = false;
 		let mut dependency_cycle = Self(IndexSet::with_capacity(visited_dependencies.len()));

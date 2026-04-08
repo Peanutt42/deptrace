@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use deptrace_config::DependencyKind;
+use deptrace_config::{DependencyKind, NormalOrPluginName};
 
 /// name of dependency is key for HashMap<String, Arc<Dependency>>
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9,7 +9,7 @@ pub struct Dependency {
 	/// list of filenames of the dynamic libraries this dependency provides
 	pub provides_libraries: Vec<String>,
 	/// list of dependency that this dependency relies on
-	pub subdependencies: HashMap<String, Arc<Dependency>>,
+	pub subdependencies: HashMap<NormalOrPluginName, Arc<Dependency>>,
 }
 impl Dependency {
 	pub fn provides_library(&self, library: &str) -> bool {

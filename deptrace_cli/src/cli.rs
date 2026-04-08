@@ -1,11 +1,15 @@
 use clap::Parser;
 use colored::Colorize;
-use deptrace::{PluginProvider, Plugins, PluginsGenerateConfigError, WarningSink};
+use deptrace::{PluginProvider, Plugins, PluginsGenerateConfigError, WarningSink, emit_warning};
 use deptrace_cargo_plugin::CargoPluginProvider;
-use deptrace_config::{LoadProjectConfigFileError, ProjectConfigFile};
+use deptrace_config::{
+	DependencyNameOrDependencyConfig, LoadProjectConfigFileError, NormalOrPluginName,
+	ProjectConfigFile,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use miette::{IntoDiagnostic, Result, miette};
 use std::{
+	collections::HashSet,
 	path::{Path, PathBuf},
 	str::FromStr,
 	time::Duration,
@@ -86,6 +90,43 @@ impl Cli {
 		}
 
 		let plugin_providers: Vec<Box<dyn PluginProvider>> = vec![Box::new(CargoPluginProvider)];
+
+		let all_plugin_names = plugin_providers
+			.iter()
+			.map(|p| p.get_plugin_name())
+			.collect::<HashSet<_>>();
+
+		// check if any non-plugin targets/dependencies have a "plugin_xyz:..." prefix so that non-plugin and
+		// plugin-owned targets/dependencies cannot have name collisions
+		for (target_name, target) in project_config_file.config.targets.iter() {
+			Self::check_for_plugin_prefix_in_name(
+				target_name,
+				"target",
+				&all_plugin_names,
+				warning_sink,
+			);
+
+			for dep in target.dependencies.iter() {
+				dep.traverse_all_dependencies(&mut |dep| {
+					if let DependencyNameOrDependencyConfig::Config(named_dep_config) = dep {
+						Self::check_for_plugin_prefix_in_name(
+							&named_dep_config.name,
+							"dependency",
+							&all_plugin_names,
+							warning_sink,
+						);
+					}
+				});
+			}
+		}
+		for dep_name in project_config_file.config.dependencies.keys() {
+			Self::check_for_plugin_prefix_in_name(
+				dep_name,
+				"dependency",
+				&all_plugin_names,
+				warning_sink,
+			);
+		}
 
 		let mut disabled_plugin_names = project_config_file
 			.plugins
@@ -253,5 +294,22 @@ impl Cli {
 		);
 
 		Ok(project_config_file)
+	}
+
+	fn check_for_plugin_prefix_in_name(
+		name: &NormalOrPluginName,
+		kind: &str,
+		all_plugin_names: &HashSet<&'static str>,
+		warning_sink: &mut dyn WarningSink,
+	) {
+		if let NormalOrPluginName::Normal(name) = name
+			&& let Some((prefix, _)) = name.split_once(':')
+			&& all_plugin_names.contains(&prefix)
+		{
+			emit_warning!(
+				warning_sink,
+				"the non-plugin {kind} '{name}' should not use the plugin prefix '{prefix}:', that is meant for {kind} created by that plugin!"
+			);
+		}
 	}
 }

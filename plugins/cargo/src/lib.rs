@@ -4,7 +4,8 @@ use deptrace::{
 	LoadPluginResult, Plugin, PluginPrintlnCallback, PluginProvider, WarningSink, emit_warning,
 };
 use deptrace_config::{
-	DependencyConfig, DependencyKind, DependencyNameOrDependencyConfig, ProjectConfig, TargetConfig,
+	DependencyConfig, DependencyKind, DependencyNameOrDependencyConfig, NormalOrPluginName,
+	ProjectConfig, TargetConfig,
 };
 use serde::Deserialize;
 use std::{
@@ -198,6 +199,8 @@ impl Plugin for CargoPlugin {
 					));
 				};
 
+				let prefixed_target_name = CargoPluginProvider::prefix_name(target.name.clone());
+
 				if is_cdylib {
 					let provides = filepaths
 						.iter()
@@ -209,7 +212,7 @@ impl Plugin for CargoPlugin {
 						.collect();
 
 					project_config.dependencies.insert(
-						target.name.clone(),
+						prefixed_target_name,
 						DependencyConfig {
 							// TODO
 							kinds: vec![DependencyKind::Runtime],
@@ -225,7 +228,11 @@ impl Plugin for CargoPlugin {
 							info.linked_lib_names
 								.clone()
 								.into_iter()
-								.map(DependencyNameOrDependencyConfig::Name)
+								.map(|name| {
+									DependencyNameOrDependencyConfig::Name(
+										CargoPluginProvider::prefix_name(name),
+									)
+								})
 								.collect::<Vec<_>>()
 						})
 						.unwrap_or_default();
@@ -250,7 +257,7 @@ impl Plugin for CargoPlugin {
 					};
 
 					project_config.targets.insert(
-						target.name.clone(),
+						prefixed_target_name,
 						TargetConfig {
 							filepath,
 							dependencies,
@@ -265,9 +272,19 @@ impl Plugin for CargoPlugin {
 }
 
 pub struct CargoPluginProvider;
+impl CargoPluginProvider {
+	const PLUGIN_NAME: &str = "cargo";
+
+	fn prefix_name(name: String) -> NormalOrPluginName {
+		NormalOrPluginName::Plugin {
+			plugin_name: Self::PLUGIN_NAME.to_string(),
+			name,
+		}
+	}
+}
 impl PluginProvider for CargoPluginProvider {
 	fn get_plugin_name(&self) -> &'static str {
-		"cargo"
+		Self::PLUGIN_NAME
 	}
 
 	fn try_load_plugin(

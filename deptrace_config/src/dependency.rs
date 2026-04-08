@@ -1,5 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::NormalOrPluginName;
+
 /// What kind of dependency, so when is it needed
 // TODO: Add custom type that can be user defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,12 +29,12 @@ pub struct DependencyConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NamedDependencyConfig {
-	pub name: String,
+	pub name: NormalOrPluginName,
 	#[serde(flatten)]
 	pub config: DependencyConfig,
 }
 impl NamedDependencyConfig {
-	pub fn new(name: String, config: DependencyConfig) -> Self {
+	pub fn new(name: NormalOrPluginName, config: DependencyConfig) -> Self {
 		Self { name, config }
 	}
 }
@@ -42,8 +44,19 @@ impl NamedDependencyConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DependencyNameOrDependencyConfig {
-	Name(String),
+	Name(NormalOrPluginName),
 	Config(NamedDependencyConfig),
+}
+impl DependencyNameOrDependencyConfig {
+	/// traverses `self` and any subdependencies of a `NamedDependencyConfig`
+	pub fn traverse_all_dependencies(&self, f: &mut impl FnMut(&DependencyNameOrDependencyConfig)) {
+		f(self);
+		if let Self::Config(named_dep_config) = self {
+			for subdep in named_dep_config.config.subdependencies.iter() {
+				subdep.traverse_all_dependencies(f);
+			}
+		}
+	}
 }
 
 /// used to have a field accept single T or a sequence of T when deserializing

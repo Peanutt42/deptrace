@@ -1,7 +1,10 @@
 #![allow(unused_assignments)] // miette actually reads those values, see
 // `LoadProjectConfigFileError`
 
-use crate::{DependencyConfig, DependencyNameOrDependencyConfig, PluginConfig, TargetConfig};
+use crate::{
+	DependencyConfig, DependencyNameOrDependencyConfig, NormalOrPluginName, PluginConfig,
+	TargetConfig,
+};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
@@ -71,10 +74,10 @@ pub struct ProjectConfig {
 	pub name: Option<String>,
 	/// dependency configurations that are reused in multiple targets in this project
 	#[serde(default)]
-	pub dependencies: HashMap<String, DependencyConfig>,
+	pub dependencies: HashMap<NormalOrPluginName, DependencyConfig>,
 
 	#[serde(default)]
-	pub targets: HashMap<String, TargetConfig>,
+	pub targets: HashMap<NormalOrPluginName, TargetConfig>,
 }
 #[derive(Debug, Clone, Error)]
 pub enum MergeProjectConfigError {

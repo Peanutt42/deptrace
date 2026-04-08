@@ -2,6 +2,7 @@ use clap::Parser;
 use colored::Colorize;
 use deptrace::{Target, WarningSink, emit_warning, resolve_project_config};
 use deptrace_cli::Cli;
+use deptrace_config::NormalOrPluginName;
 use lddtree::{DependencyAnalyzer, Library};
 use miette::{IntoDiagnostic, Result, miette};
 
@@ -19,6 +20,7 @@ fn main() -> Result<()> {
 
 	match cli.target {
 		Some(target_name) => {
+			let target_name: NormalOrPluginName = target_name.into();
 			let Some(target) = project.targets.get(&target_name) else {
 				return Err(miette!(
 					"could not find target named '{target_name}' in this deptrace project configuration!",
@@ -71,7 +73,7 @@ fn print_lib_info(name: &str, lib: &Library) {
 }
 
 fn analyze_target(
-	target_name: &str,
+	target_name: &NormalOrPluginName,
 	target: &Target,
 	warning_sink: &mut dyn WarningSink,
 ) -> Result<()> {

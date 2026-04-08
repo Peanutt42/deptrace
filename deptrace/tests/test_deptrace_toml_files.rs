@@ -1,5 +1,5 @@
 use deptrace::{DependencyCycle, ResolveProjectError, resolve_project_config};
-use deptrace_config::ProjectConfigFile;
+use deptrace_config::{NormalOrPluginName, ProjectConfigFile};
 
 #[test]
 fn stresstest() {
@@ -22,7 +22,12 @@ fn cyclic_dependencies() {
 	assert_eq!(
 		resolve_error,
 		ResolveProjectError::CyclicDependency {
-			dependency_cicle: DependencyCycle(["foo5", "foo6", "foo7"].map(str::to_string).into())
+			dependency_cicle: DependencyCycle(
+				["foo5", "foo6", "foo7"]
+					.map(str::to_string)
+					.map(NormalOrPluginName::Normal)
+					.into()
+			)
 		}
 	);
 }
