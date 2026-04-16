@@ -14,7 +14,7 @@ fn main() -> Result<()> {
 	let project_config_file = cli.load_project_config(&mut cli_warning_sink)?;
 	warnings_as_errors = warnings_as_errors || project_config_file.warnings_as_errors;
 
-	println!("project config: {project_config_file:#?}");
+	// println!("project config: {project_config_file:#?}");
 
 	let project = resolve_project_config(project_config_file.config).into_diagnostic()?;
 
@@ -64,11 +64,16 @@ impl WarningSink for CliWarningSink {
 	}
 }
 
-fn print_lib_info(name: &str, lib: &Library) {
+fn print_lib_info(filename: &str, dependency_name: Option<&NormalOrPluginName>, lib: &Library) {
+	let lib_name = match dependency_name {
+		Some(dependency_name) => format!("{} ({filename})", dependency_name.pretty_fmt()),
+		None => filename.to_string(),
+	};
+
 	if lib.found() {
-		println!("  {name} => {}", lib.path.display());
+		println!("  {lib_name} => {}", lib.path.display());
 	} else {
-		println!("  {name}");
+		println!("  {lib_name}");
 	}
 }
 
@@ -78,13 +83,10 @@ fn analyze_target(
 	warning_sink: &mut dyn WarningSink,
 ) -> Result<()> {
 	println!(
-		"\n\n{}",
-		format!(
-			" === Analyzing target {target_name} ({}) ===",
-			target.filepath.display()
-		)
-		.bright_blue()
-		.bold()
+		"\n\n === {} {} ({}) ===",
+		"Analyzing target".bright_green().bold(),
+		target_name.pretty_fmt(),
+		target.filepath.display(),
 	);
 
 	let deps = DependencyAnalyzer::default()
@@ -94,33 +96,32 @@ fn analyze_target(
 	let mut documented_dependencies = vec![];
 	let mut undocumented_dependencies = vec![];
 	for (name, lib) in &deps.libraries {
-		let dependency_declared_in_config = target
+		let dependency_providing_library = target
 			.dependencies
-			.values()
-			.any(|dep| dep.provides_library(name));
+			.iter()
+			.find(|(_dep_name, dep)| dep.provides_library(name));
 
-		if dependency_declared_in_config {
-			documented_dependencies.push((name, lib));
-		} else {
-			undocumented_dependencies.push((name, lib));
+		match dependency_providing_library {
+			Some(dependency) => documented_dependencies.push((dependency, name, lib)),
+			None => undocumented_dependencies.push((name, lib)),
 		}
 	}
 
 	println!(
 		"\n{}:\n  {}",
-		"Direct dependencies".bright_green(),
+		"  Direct dependencies".bright_green(),
 		deps.needed.join(", ")
 	);
 
-	println!("\n{}:", "All documented dependencies".bright_green());
-	for (name, lib) in documented_dependencies {
-		print_lib_info(name, lib);
+	println!("\n{}:", "  All documented dependencies".bright_green());
+	for ((dependency_name, _dependency), name, lib) in documented_dependencies {
+		print_lib_info(name, Some(dependency_name), lib);
 	}
 
 	if !undocumented_dependencies.is_empty() {
 		warning_sink.emit_warning("\nSome dependencies are not documented!");
 		for (name, lib) in undocumented_dependencies {
-			print_lib_info(name, lib);
+			print_lib_info(name, None, lib);
 		}
 	}
 

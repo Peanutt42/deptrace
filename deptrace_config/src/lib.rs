@@ -12,10 +12,20 @@ pub use target::TargetConfig;
 mod plugin;
 pub use plugin::PluginConfig;
 
+use colored::Colorize;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum NormalOrPluginName {
 	Normal(String),
 	Plugin { plugin_name: String, name: String },
+}
+impl NormalOrPluginName {
+	pub fn pretty_fmt(&self) -> String {
+		match self {
+			Self::Normal(name) => name.clone(),
+			Self::Plugin { plugin_name, name } => format!("{}:{name}", plugin_name.bright_black()),
+		}
+	}
 }
 impl From<String> for NormalOrPluginName {
 	fn from(value: String) -> Self {

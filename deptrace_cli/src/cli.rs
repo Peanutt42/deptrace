@@ -83,7 +83,7 @@ impl Cli {
 			let num_config_dep_declarations =
 				project_config_file.config.count_dependency_declarations();
 			println!(
-				"{:>14} project config file {} ({num_config_targets} targets, {num_config_dep_declarations} dependencies declarations)",
+				"{:>9} project config file {} ({num_config_targets} targets, {num_config_dep_declarations} dependencies declarations)",
 				"Loaded".green().bold(),
 				project_config_filepath.display()
 			);

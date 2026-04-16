@@ -7,4 +7,5 @@ edition = "2024"
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
+colored = { workspace = true }
 miette = "7.6.0"
